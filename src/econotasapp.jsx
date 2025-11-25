@@ -96,7 +96,6 @@ const EcoNotasApp = () => {
 
             const ctx = canvasRef.current.getContext('2d');
             ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-
         } catch (err) {
             console.error("❌ Error:", err);
             alert("Error: " + err.message);
@@ -272,7 +271,7 @@ const EcoNotasApp = () => {
     };
 
     return (
-        <div className="flex flex-col h-screen bg-slate-900 text-slate-100 font-sans overflow-hidden">
+        <div className="flex flex-col h-screen bg-slate-900 text-slate-100 font-sans overflow-y-auto">
             <div className="h-16 border-b border-slate-700 bg-slate-800 flex items-center justify-between px-6 shadow-lg z-10">
                 <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center transform rotate-12">
