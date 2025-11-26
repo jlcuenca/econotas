@@ -89,19 +89,6 @@ return (
                     >
                         Crear una nueva sesión &rarr;
                     </Link>
-                </div>
-            ) : (
-                <div className="grid gap-4">
-                    {sessions.map(session => (
-                        <Link
-                            key={session.id}
-                            to={`/share/${session.id}`}
-                            className="block bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl p-4 transition-all hover:border-indigo-500/50 hover:shadow-lg group"
-                        >
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-indigo-500/10 rounded-lg flex items-center justify-center text-indigo-400 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                                        <Play className="w-6 h-6 ml-1" />
                                     </div>
                                     <div>
                                         <h3 className="font-semibold text-lg group-hover:text-indigo-300 transition-colors">
@@ -120,20 +107,20 @@ return (
                                     </div>
                                 </div>
 
-                                <button
-                                    onClick={(e) => copyShareLink(e, session.id)}
-                                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
-                                    title="Copiar enlace"
-                                >
-                                    <Share2 className="w-5 h-5" />
-                                </button>
-                            </div>
-                        </Link>
-                    ))}
-                </div>
-            )}
-        </div>
+        <button
+            onClick={(e) => copyShareLink(e, session.id)}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+            title="Copiar enlace"
+        >
+            <Share2 className="w-5 h-5" />
+        </button>
     </div>
+                        </Link >
+                    ))}
+                </div >
+            )}
+        </div >
+    </div >
 );
 };
 
