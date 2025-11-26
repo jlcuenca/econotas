@@ -1,7 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Download } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2 } from 'lucide-react';
+import { uploadAudio, saveSession, getSession, auth } from './firebase';
 
-const EcoNotasApp = () => {
+const EcoNotasApp = ({ readOnly = false }) => {
+    const { sessionId } = useParams();
+    const navigate = useNavigate();
+
     const [mode, setMode] = useState('IDLE');
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
@@ -10,6 +15,11 @@ const EcoNotasApp = () => {
     const [audioUrl, setAudioUrl] = useState(null);
     const [penColor] = useState('#e2e8f0');
 
+    // New state for persistence
+    const [sessionName, setSessionName] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState(!!sessionId);
+
     const canvasRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
@@ -17,6 +27,31 @@ const EcoNotasApp = () => {
     const startTimeRef = useRef(0);
     const rafRef = useRef(null);
     const currentStrokeRef = useRef(null);
+
+    // Load session if ID is present
+    useEffect(() => {
+        if (sessionId) {
+            const loadData = async () => {
+                try {
+                    const sessionData = await getSession(sessionId);
+                    if (sessionData) {
+                        setSessionName(sessionData.sessionName);
+                        setAudioUrl(sessionData.audioUrl);
+                        setStrokes(JSON.parse(sessionData.strokes));
+                        setDuration(sessionData.durationMs / 1000);
+                        // Trigger redraw after state update
+                        setTimeout(() => redrawCanvas(0, true), 100);
+                    }
+                } catch (error) {
+                    console.error("Error loading session:", error);
+                    alert("Error al cargar la sesión");
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+            loadData();
+        }
+    }, [sessionId]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -39,7 +74,7 @@ const EcoNotasApp = () => {
         resizeCanvas();
 
         return () => window.removeEventListener('resize', resizeCanvas);
-    }, [strokes]);
+    }, [strokes, isLoading]); // Re-run when loading finishes
 
     useEffect(() => {
         let interval;
@@ -53,6 +88,7 @@ const EcoNotasApp = () => {
     }, [mode]);
 
     const startRecording = async () => {
+        if (readOnly) return;
         try {
             console.log("🎤 Solicitando micrófono");
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -67,14 +103,12 @@ const EcoNotasApp = () => {
             audioChunksRef.current = [];
 
             mediaRecorderRef.current.ondataavailable = (e) => {
-                console.log(`📦 ${e.data.size} bytes`);
                 if (e.data.size > 0) audioChunksRef.current.push(e.data);
             };
 
             mediaRecorderRef.current.onstop = () => {
                 console.log("⏹️ Detenido");
                 const blob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
-                console.log(`🎬 Blob: ${blob.size} bytes`);
 
                 if (blob.size === 0) {
                     alert("No se grabó audio");
@@ -120,7 +154,7 @@ const EcoNotasApp = () => {
     };
 
     const handlePointerDown = (e) => {
-        if (mode !== 'RECORDING') return;
+        if (mode !== 'RECORDING' || readOnly) return;
 
         const { offsetX, offsetY, pressure } = getCoordinates(e);
         const timeOffset = Date.now() - startTimeRef.current;
@@ -139,7 +173,7 @@ const EcoNotasApp = () => {
     };
 
     const handlePointerMove = (e) => {
-        if (mode !== 'RECORDING' || !currentStrokeRef.current) return;
+        if (mode !== 'RECORDING' || !currentStrokeRef.current || readOnly) return;
         e.preventDefault();
 
         const { offsetX, offsetY, pressure } = getCoordinates(e);
@@ -163,7 +197,7 @@ const EcoNotasApp = () => {
     };
 
     const handlePointerUp = () => {
-        if (mode !== 'RECORDING' || !currentStrokeRef.current) return;
+        if (mode !== 'RECORDING' || !currentStrokeRef.current || readOnly) return;
 
         const finishedStroke = currentStrokeRef.current;
         setStrokes(prev => [...prev, finishedStroke]);
@@ -248,36 +282,61 @@ const EcoNotasApp = () => {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const downloadSession = () => {
-        const data = {
-            date: new Date().toISOString(),
-            duration: duration,
-            strokes: strokes
-        };
-        const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
-        const url = URL.createObjectURL(blob);
+    const handleSaveSession = async () => {
+        if (!audioBlob || !auth.currentUser) return;
+        if (!sessionName.trim()) {
+            alert("Por favor ingresa un nombre para la sesión");
+            return;
+        }
 
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = "sesion-econotas.json";
-        a.click();
+        setIsSaving(true);
+        try {
+            // 1. Upload Audio
+            const tempId = Date.now().toString(); // Temporary ID for filename
+            const downloadUrl = await uploadAudio(audioBlob, tempId);
 
-        if (audioUrl) {
-            const a2 = document.createElement('a');
-            a2.href = audioUrl;
-            a2.download = "sesion-econotas.webm";
-            a2.click();
+            // 2. Save Metadata
+            const sessionData = {
+                userId: auth.currentUser.uid,
+                sessionName: sessionName,
+                createdAt: new Date(),
+                audioUrl: downloadUrl,
+                durationMs: duration * 1000,
+                strokes: JSON.stringify(strokes)
+            };
+
+            await saveSession(sessionData);
+            alert("¡Sesión guardada exitosamente!");
+            navigate('/'); // Go back to dashboard
+        } catch (error) {
+            console.error("Error saving session:", error);
+            alert("Error al guardar la sesión: " + error.message);
+        } finally {
+            setIsSaving(false);
         }
     };
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-slate-900 text-white">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col h-screen bg-slate-900 text-slate-100 font-sans overflow-y-auto pb-4 pb-[env(safe-area-inset-bottom)]">
             <div className="h-16 border-b border-slate-700 bg-slate-800 flex items-center justify-between px-6 shadow-lg z-10">
-                <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center transform rotate-12">
-                        <PenTool className="w-5 h-5 text-white" />
+                <div className="flex items-center gap-4">
+                    <button onClick={() => navigate('/')} className="p-2 hover:bg-slate-700 rounded-full transition-colors">
+                        <ArrowLeft className="w-5 h-5 text-slate-400" />
+                    </button>
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center transform rotate-12">
+                            <PenTool className="w-5 h-5 text-white" />
+                        </div>
+                        <h1 className="text-xl font-bold tracking-tight hidden sm:block">EcoNotas<span className="text-indigo-400">Notes</span></h1>
                     </div>
-                    <h1 className="text-xl font-bold tracking-tight">EcoNotas<span className="text-indigo-400">Notes</span></h1>
                 </div>
 
                 <div className="flex items-center gap-4 bg-slate-900 py-1 px-4 rounded-full border border-slate-700">
@@ -285,11 +344,11 @@ const EcoNotasApp = () => {
                     <span className="font-mono text-lg">{formatTime(mode === 'RECORDING' || mode === 'IDLE' && !audioUrl ? duration * 1000 : currentTime)}</span>
                 </div>
 
-                <div className="flex gap-2">
-                    {audioUrl && (
-                        <button onClick={downloadSession} className="p-2 hover:bg-slate-700 rounded-full transition-colors">
-                            <Download className="w-5 h-5 text-slate-400" />
-                        </button>
+                <div className="flex gap-2 items-center">
+                    {readOnly && (
+                        <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 text-xs font-bold rounded-full border border-indigo-500/30">
+                            SOLO LECTURA
+                        </span>
                     )}
                 </div>
             </div>
@@ -311,7 +370,7 @@ const EcoNotasApp = () => {
                     onPointerLeave={handlePointerUp}
                 />
 
-                {mode === 'IDLE' && strokes.length === 0 && (
+                {mode === 'IDLE' && strokes.length === 0 && !readOnly && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-center text-slate-500">
                             <Mic className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -325,7 +384,21 @@ const EcoNotasApp = () => {
             <div className="bg-slate-800 border-t border-slate-700 p-4 flex flex-col justify-center">
                 {audioUrl && (
                     <div className="mb-4 bg-slate-700 p-3 rounded-lg">
-                        <p className="text-xs text-slate-400 mb-2">🔊 Controles de Audio</p>
+                        <div className="flex justify-between items-center mb-2">
+                            <p className="text-xs text-slate-400">🔊 Controles de Audio</p>
+                            {!readOnly && !sessionId && (
+                                <input
+                                    type="text"
+                                    placeholder="Nombre de la sesión..."
+                                    value={sessionName}
+                                    onChange={(e) => setSessionName(e.target.value)}
+                                    className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                                />
+                            )}
+                            {readOnly && (
+                                <p className="text-sm font-semibold text-indigo-300">{sessionName}</p>
+                            )}
+                        </div>
                         <audio
                             ref={audioPlayerRef}
                             src={audioUrl}
@@ -363,34 +436,57 @@ const EcoNotasApp = () => {
                 <div className="flex items-center justify-center gap-6">
                     {mode === 'IDLE' || mode === 'PAUSED' ? (
                         !audioUrl ? (
-                            <button
-                                onClick={startRecording}
-                                className="flex items-center gap-2 px-8 py-2 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold transition-all shadow-lg shadow-red-900/20 active:scale-95"
-                            >
-                                <Mic className="w-5 h-5" /> GRABAR
-                            </button>
+                            !readOnly && (
+                                <button
+                                    onClick={startRecording}
+                                    className="flex items-center gap-2 px-8 py-2 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold transition-all shadow-lg shadow-red-900/20 active:scale-95"
+                                >
+                                    <Mic className="w-5 h-5" /> GRABAR
+                                </button>
+                            )
                         ) : (
                             <div className="flex gap-4">
                                 <button
                                     onClick={togglePlayback}
                                     className="flex items-center gap-2 px-8 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-bold transition-all shadow-lg shadow-indigo-900/20"
                                 >
-                                    <Play className="w-5 h-5 fill-current" /> REPRODUCIR NOTAS
+                                    <Play className="w-5 h-5 fill-current" /> REPRODUCIR
                                 </button>
-                                <button
-                                    onClick={() => {
-                                        setAudioUrl(null);
-                                        setStrokes([]);
-                                        setDuration(0);
-                                        if (canvasRef.current) {
-                                            const ctx = canvasRef.current.getContext('2d');
-                                            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                                        }
-                                    }}
-                                    className="p-2 bg-slate-700 hover:bg-slate-600 rounded-full text-slate-300"
-                                >
-                                    <RotateCcw className="w-5 h-5" />
-                                </button>
+
+                                {!readOnly && !sessionId && (
+                                    <>
+                                        <button
+                                            onClick={handleSaveSession}
+                                            disabled={isSaving}
+                                            className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-full font-bold transition-all shadow-lg shadow-green-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isSaving ? (
+                                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            ) : (
+                                                <Save className="w-5 h-5" />
+                                            )}
+                                            {isSaving ? 'GUARDANDO...' : 'GUARDAR'}
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                if (confirm("¿Estás seguro? Se perderá la grabación actual.")) {
+                                                    setAudioUrl(null);
+                                                    setStrokes([]);
+                                                    setDuration(0);
+                                                    if (canvasRef.current) {
+                                                        const ctx = canvasRef.current.getContext('2d');
+                                                        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                                                    }
+                                                }
+                                            }}
+                                            className="p-2 bg-slate-700 hover:bg-slate-600 rounded-full text-slate-300"
+                                            title="Reiniciar"
+                                        >
+                                            <RotateCcw className="w-5 h-5" />
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         )
                     ) : (
