@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously } from "firebase/auth";
-import { getFirestore, collection, addDoc, getDoc, doc, query, where, getDocs, orderBy } from "firebase/firestore";
+import { getFirestore, collection, addDoc, getDoc, doc, query, where, getDocs, orderBy, deleteDoc, updateDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // TODO: Replace with your actual Firebase project configuration
@@ -92,6 +92,31 @@ export const getUserSessions = async (userId) => {
         return sessions;
     } catch (error) {
         console.error("Error getting user sessions:", error);
+        throw error;
+    }
+};
+
+// Delete a session (soft delete - only removes Firestore doc, keeps audio for recovery)
+export const deleteSession = async (sessionId) => {
+    try {
+        const docRef = doc(db, "sessions", sessionId);
+        await deleteDoc(docRef);
+        // Note: Audio file in Storage is retained for recovery
+        return true;
+    } catch (error) {
+        console.error("Error deleting session:", error);
+        throw error;
+    }
+};
+
+// Update session metadata
+export const updateSession = async (sessionId, updates) => {
+    try {
+        const docRef = doc(db, "sessions", sessionId);
+        await updateDoc(docRef, updates);
+        return true;
+    } catch (error) {
+        console.error("Error updating session:", error);
         throw error;
     }
 };

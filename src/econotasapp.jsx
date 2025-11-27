@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2 } from 'lucide-react';
 import { uploadAudio, saveSession, getSession, auth } from './firebase';
+import AlertDialog from './components/AlertDialog';
+import ConfirmDialog from './components/ConfirmDialog';
+import { MAX_RECORDING_DURATION_MS, RECORDING_WARNING_TIME_MS } from './utils/constants';
 
 const EcoNotasApp = ({ readOnly = false }) => {
     const { sessionId } = useParams();
@@ -19,6 +22,13 @@ const EcoNotasApp = ({ readOnly = false }) => {
     const [sessionName, setSessionName] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(!!sessionId);
+
+    // Dialog states
+    const [alertDialog, setAlertDialog] = useState({ isOpen: false, type: 'info', title: '', message: '' });
+    const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+
+    // Recording limits
+    const [hasShownWarning, setHasShownWarning] = useState(false);
 
     const canvasRef = useRef(null);
     const mediaRecorderRef = useRef(null);
@@ -44,7 +54,12 @@ const EcoNotasApp = ({ readOnly = false }) => {
                     }
                 } catch (error) {
                     console.error("Error loading session:", error);
-                    alert("Error al cargar la sesión");
+                    setAlertDialog({
+                        isOpen: true,
+                        type: 'error',
+                        title: 'Error',
+                        message: 'Error al cargar la sesión. Por favor intenta nuevamente.'
+                    });
                 } finally {
                     setIsLoading(false);
                 }
@@ -80,12 +95,35 @@ const EcoNotasApp = ({ readOnly = false }) => {
         let interval;
         if (mode === 'RECORDING') {
             interval = setInterval(() => {
-                setDuration(d => d + 1);
-                setCurrentTime(Date.now() - startTimeRef.current);
+                const elapsed = Date.now() - startTimeRef.current;
+                setDuration(elapsed / 1000);
+                setCurrentTime(elapsed);
+
+                // Show warning at 90% of max duration
+                if (!hasShownWarning && elapsed >= RECORDING_WARNING_TIME_MS) {
+                    setHasShownWarning(true);
+                    setAlertDialog({
+                        isOpen: true,
+                        type: 'warning',
+                        title: 'Límite de tiempo',
+                        message: 'Te quedan aproximadamente 12 minutos de grabación. La sesión se detendrá automáticamente al alcanzar 120 minutos.'
+                    });
+                }
+
+                // Auto-stop at max duration
+                if (elapsed >= MAX_RECORDING_DURATION_MS) {
+                    stopRecording();
+                    setAlertDialog({
+                        isOpen: true,
+                        type: 'info',
+                        title: 'Grabación completada',
+                        message: 'Se alcanzó el límite máximo de 120 minutos. La grabación se detuvo automáticamente.'
+                    });
+                }
             }, 100);
         }
         return () => clearInterval(interval);
-    }, [mode]);
+    }, [mode, hasShownWarning]);
 
     const startRecording = async () => {
         if (readOnly) return;
@@ -111,7 +149,12 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 const blob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
 
                 if (blob.size === 0) {
-                    alert("No se grabó audio");
+                    setAlertDialog({
+                        isOpen: true,
+                        type: 'error',
+                        title: 'Error de grabación',
+                        message: 'No se grabó audio. Por favor verifica el acceso al micrófono e intenta nuevamente.'
+                    });
                     return;
                 }
 
@@ -125,6 +168,7 @@ const EcoNotasApp = ({ readOnly = false }) => {
             console.log("🔴 Grabando");
             startTimeRef.current = Date.now();
             setStrokes([]);
+            setHasShownWarning(false);
             setDuration(0);
             setMode('RECORDING');
 
@@ -132,7 +176,12 @@ const EcoNotasApp = ({ readOnly = false }) => {
             ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         } catch (err) {
             console.error("❌ Error:", err);
-            alert("Error: " + err.message);
+            setAlertDialog({
+                isOpen: true,
+                type: 'error',
+                title: 'Error de micrófono',
+                message: `No se pudo acceder al micrófono: ${err.message}`
+            });
         }
     };
 
@@ -285,7 +334,12 @@ const EcoNotasApp = ({ readOnly = false }) => {
     const handleSaveSession = async () => {
         if (!audioBlob || !auth.currentUser) return;
         if (!sessionName.trim()) {
-            alert("Por favor ingresa un nombre para la sesión");
+            setAlertDialog({
+                isOpen: true,
+                type: 'warning',
+                title: 'Nombre requerido',
+                message: 'Por favor ingresa un nombre para la sesión antes de guardar.'
+            });
             return;
         }
 
@@ -306,11 +360,21 @@ const EcoNotasApp = ({ readOnly = false }) => {
             };
 
             await saveSession(sessionData);
-            alert("¡Sesión guardada exitosamente!");
-            navigate('/'); // Go back to dashboard
+            setAlertDialog({
+                isOpen: true,
+                type: 'success',
+                title: '¡Éxito!',
+                message: 'Sesión guardada exitosamente. Redirigiendo al panel...'
+            });
+            setTimeout(() => navigate('/'), 1500);
         } catch (error) {
             console.error("Error saving session:", error);
-            alert("Error al guardar la sesión: " + error.message);
+            setAlertDialog({
+                isOpen: true,
+                type: 'error',
+                title: 'Error al guardar',
+                message: `No se pudo guardar la sesión: ${error.message}`
+            });
         } finally {
             setIsSaving(false);
         }
@@ -383,27 +447,26 @@ const EcoNotasApp = ({ readOnly = false }) => {
 
             <div className="bg-slate-800 border-t border-slate-700 p-4 flex flex-col justify-center">
                 {audioUrl && (
-                    <div className="mb-4 bg-slate-700 p-3 rounded-lg">
-                        <div className="flex justify-between items-center mb-2">
-                            <p className="text-xs text-slate-400">🔊 Controles de Audio</p>
+                    <div className="mb-4">
+                        <div className="flex justify-between items-center mb-3">
                             {!readOnly && !sessionId && (
                                 <input
                                     type="text"
                                     placeholder="Nombre de la sesión..."
                                     value={sessionName}
                                     onChange={(e) => setSessionName(e.target.value)}
-                                    className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                                    className="flex-1 bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                                 />
                             )}
                             {readOnly && (
-                                <p className="text-sm font-semibold text-indigo-300">{sessionName}</p>
+                                <p className="text-lg font-semibold text-indigo-300">{sessionName}</p>
                             )}
                         </div>
+                        {/* Hidden audio element for playback control */}
                         <audio
                             ref={audioPlayerRef}
                             src={audioUrl}
-                            controls
-                            className="w-full"
+                            className="hidden"
                             onPlay={() => {
                                 console.log("▶️ Play");
                                 setMode('PLAYING');
@@ -470,15 +533,24 @@ const EcoNotasApp = ({ readOnly = false }) => {
 
                                         <button
                                             onClick={() => {
-                                                if (confirm("¿Estás seguro? Se perderá la grabación actual.")) {
-                                                    setAudioUrl(null);
-                                                    setStrokes([]);
-                                                    setDuration(0);
-                                                    if (canvasRef.current) {
-                                                        const ctx = canvasRef.current.getContext('2d');
-                                                        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                                                setConfirmDialog({
+                                                    isOpen: true,
+                                                    title: '¿Reiniciar grabación?',
+                                                    message: '¿Estás seguro? Se perderá la grabación actual y no podrás recuperarla.',
+                                                    variant: 'destructive',
+                                                    onConfirm: () => {
+                                                        setAudioUrl(null);
+                                                        setAudioBlob(null);
+                                                        setStrokes([]);
+                                                        setDuration(0);
+                                                        setSessionName('');
+                                                        setHasShownWarning(false);
+                                                        if (canvasRef.current) {
+                                                            const ctx = canvasRef.current.getContext('2d');
+                                                            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                                                        }
                                                     }
-                                                }
+                                                });
                                             }}
                                             className="p-2 bg-slate-700 hover:bg-slate-600 rounded-full text-slate-300"
                                             title="Reiniciar"
@@ -508,6 +580,24 @@ const EcoNotasApp = ({ readOnly = false }) => {
                     )}
                 </div>
             </div>
+
+            {/* Dialogs */}
+            <AlertDialog
+                isOpen={alertDialog.isOpen}
+                onClose={() => setAlertDialog({ ...alertDialog, isOpen: false })}
+                type={alertDialog.type}
+                title={alertDialog.title}
+                message={alertDialog.message}
+            />
+            <ConfirmDialog
+                isOpen={confirmDialog.isOpen}
+                onClose={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+                onConfirm={confirmDialog.onConfirm}
+                onCancel={() => setConfirmDialog({ ...confirmDialog, isOpen: false })}
+                title={confirmDialog.title}
+                message={confirmDialog.message}
+                variant={confirmDialog.variant}
+            />
         </div>
     );
 };
