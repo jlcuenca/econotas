@@ -4,7 +4,10 @@ import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, S
 import { uploadAudio, saveSession, getSession, auth } from './firebase';
 import AlertDialog from './components/AlertDialog';
 import ConfirmDialog from './components/ConfirmDialog';
-import { MAX_RECORDING_DURATION_MS, RECORDING_WARNING_TIME_MS } from './utils/constants';
+import InfiniteCanvas from './components/InfiniteCanvas';
+import DrawingToolbar from './components/DrawingToolbar';
+import { useDrawingHistory } from './hooks/useDrawingHistory';
+import { MAX_RECORDING_DURATION_MS, RECORDING_WARNING_TIME_MS, DEFAULT_COLOR, DEFAULT_THICKNESS } from './utils/constants';
 
 const EcoNotasApp = ({ readOnly = false }) => {
     const { sessionId } = useParams();
@@ -13,12 +16,18 @@ const EcoNotasApp = ({ readOnly = false }) => {
     const [mode, setMode] = useState('IDLE');
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
-    const [strokes, setStrokes] = useState([]);
     const [audioBlob, setAudioBlob] = useState(null);
     const [audioUrl, setAudioUrl] = useState(null);
-    const [penColor] = useState('#e2e8f0');
 
-    // New state for persistence
+    // Drawing tool states (Phase 1)
+    const [currentTool, setCurrentTool] = useState('pen'); // pen | eraser
+    const [penColor, setPenColor] = useState(DEFAULT_COLOR);
+    const [penThickness, setPenThickness] = useState(DEFAULT_THICKNESS);
+
+    // Use drawing history hook for undo/redo
+    const { strokes, setStrokes, undo, redo, canUndo, canRedo, addStroke, deleteStroke, clearHistory } = useDrawingHistory([]);
+
+    // Persistence state
     const [sessionName, setSessionName] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(!!sessionId);
@@ -167,7 +176,9 @@ const EcoNotasApp = ({ readOnly = false }) => {
             mediaRecorderRef.current.start();
             console.log("🔴 Grabando");
             startTimeRef.current = Date.now();
-            setStrokes([]);
+            startTimeRef.current = Date.now();
+            setStrokes([]); // This will clear history via the hook if we passed []
+            clearHistory(); // Explicitly clear history for new recording
             setHasShownWarning(false);
             setDuration(0);
             setMode('RECORDING');
@@ -194,10 +205,14 @@ const EcoNotasApp = ({ readOnly = false }) => {
     };
 
     const getCoordinates = (e) => {
-        const rect = canvasRef.current.getBoundingClientRect();
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
         return {
-            offsetX: e.clientX - rect.left,
-            offsetY: e.clientY - rect.top,
+            offsetX: (e.clientX - rect.left) * scaleX,
+            offsetY: (e.clientY - rect.top) * scaleY,
             pressure: e.pressure
         };
     };
@@ -209,16 +224,21 @@ const EcoNotasApp = ({ readOnly = false }) => {
         const timeOffset = Date.now() - startTimeRef.current;
 
         currentStrokeRef.current = {
+            tool: currentTool,
             color: penColor,
+            thickness: penThickness,
             startTime: timeOffset,
             points: [{ x: offsetX, y: offsetY, p: pressure || 0.5, t: timeOffset }]
         };
 
         const ctx = canvasRef.current.getContext('2d');
+        ctx.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over';
         ctx.beginPath();
         ctx.moveTo(offsetX, offsetY);
-        ctx.lineWidth = (pressure || 0.5) * 8;
+        ctx.lineWidth = (pressure || 0.5) * penThickness;
         ctx.strokeStyle = penColor;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
     };
 
     const handlePointerMove = (e) => {
@@ -236,8 +256,7 @@ const EcoNotasApp = ({ readOnly = false }) => {
         });
 
         const ctx = canvasRef.current.getContext('2d');
-        ctx.lineWidth = (pressure || 0.5) * 8;
-        ctx.lineCap = 'round';
+        ctx.lineWidth = (pressure || 0.5) * currentStrokeRef.current.thickness;
         ctx.lineTo(offsetX, offsetY);
         ctx.stroke();
 
@@ -249,7 +268,7 @@ const EcoNotasApp = ({ readOnly = false }) => {
         if (mode !== 'RECORDING' || !currentStrokeRef.current || readOnly) return;
 
         const finishedStroke = currentStrokeRef.current;
-        setStrokes(prev => [...prev, finishedStroke]);
+        addStroke(finishedStroke);
         currentStrokeRef.current = null;
     };
 
@@ -294,8 +313,11 @@ const EcoNotasApp = ({ readOnly = false }) => {
             if (!stroke) return;
             if (!forceAll && stroke.startTime > targetTimeMs) return;
 
+            ctx.globalCompositeOperation = stroke.tool === 'eraser' ? 'destination-out' : 'source-over';
             ctx.beginPath();
             ctx.strokeStyle = stroke.color;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
 
             let hasStarted = false;
 
@@ -303,7 +325,8 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 const point = stroke.points[i];
                 if (!forceAll && point.t > targetTimeMs) break;
 
-                ctx.lineWidth = point.p * 8;
+                const baseThickness = stroke.thickness || 4;
+                ctx.lineWidth = point.p * baseThickness;
 
                 if (!hasStarted) {
                     ctx.moveTo(point.x, point.y);
@@ -314,6 +337,7 @@ const EcoNotasApp = ({ readOnly = false }) => {
             }
             if (hasStarted) ctx.stroke();
         });
+        ctx.globalCompositeOperation = 'source-over';
     };
 
     const handleSeek = (e) => {
@@ -425,13 +449,28 @@ const EcoNotasApp = ({ readOnly = false }) => {
                     }}>
                 </div>
 
-                <canvas
-                    ref={canvasRef}
-                    className="w-full h-full block touch-none"
+                <InfiniteCanvas
+                    canvasRef={canvasRef}
+                    strokes={strokes}
                     onPointerDown={handlePointerDown}
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUp}
-                    onPointerLeave={handlePointerUp}
+                    mode={mode}
+                    readOnly={readOnly}
+                />
+
+                <DrawingToolbar
+                    currentTool={currentTool}
+                    onToolChange={setCurrentTool}
+                    penColor={penColor}
+                    onColorChange={setPenColor}
+                    penThickness={penThickness}
+                    onThicknessChange={setPenThickness}
+                    canUndo={canUndo && mode !== 'RECORDING'}
+                    canRedo={canRedo && mode !== 'RECORDING'}
+                    onUndo={undo}
+                    onRedo={redo}
+                    disabled={mode === 'PLAYING' || readOnly}
                 />
 
                 {mode === 'IDLE' && strokes.length === 0 && !readOnly && (
@@ -542,6 +581,7 @@ const EcoNotasApp = ({ readOnly = false }) => {
                                                         setAudioUrl(null);
                                                         setAudioBlob(null);
                                                         setStrokes([]);
+                                                        clearHistory();
                                                         setDuration(0);
                                                         setSessionName('');
                                                         setHasShownWarning(false);
