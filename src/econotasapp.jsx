@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2 } from 'lucide-react';
-import { uploadAudio, saveSession, getSession, auth } from './firebase';
+import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2, MessageSquare } from 'lucide-react';
+import { uploadAudio, saveSession, getSession, auth, addComment, updateComment, deleteComment, subscribeToComments } from './firebase';
 import AlertDialog from './components/AlertDialog';
 import ConfirmDialog from './components/ConfirmDialog';
 import InfiniteCanvas from './components/InfiniteCanvas';
 import DrawingToolbar from './components/DrawingToolbar';
+import CommentPanel from './components/CommentPanel';
+import CommentMarker from './components/CommentMarker';
 import { useDrawingHistory } from './hooks/useDrawingHistory';
 import { MAX_RECORDING_DURATION_MS, RECORDING_WARNING_TIME_MS, DEFAULT_COLOR, DEFAULT_THICKNESS } from './utils/constants';
+import { generateDisplayName, getUserColor } from './utils/userUtils';
 
 const EcoNotasApp = ({ readOnly = false }) => {
     const { sessionId } = useParams();
@@ -39,6 +42,12 @@ const EcoNotasApp = ({ readOnly = false }) => {
     // Recording limits
     const [hasShownWarning, setHasShownWarning] = useState(false);
 
+    // Comments state
+    const [showCommentPanel, setShowCommentPanel] = useState(false);
+    const [comments, setComments] = useState([]);
+    const [userName, setUserName] = useState('');
+    const [userColor, setUserColor] = useState('#6366f1');
+
     const canvasRef = useRef(null);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
@@ -46,6 +55,37 @@ const EcoNotasApp = ({ readOnly = false }) => {
     const startTimeRef = useRef(0);
     const rafRef = useRef(null);
     const currentStrokeRef = useRef(null);
+    const unsubscribeCommentsRef = useRef(null);
+
+    // Initialize user identity on mount
+    useEffect(() => {
+        const initUser = async () => {
+            const user = auth.currentUser;
+            if (user) {
+                const displayName = generateDisplayName(user.uid);
+                const color = getUserColor(user.uid);
+                setUserName(displayName);
+                setUserColor(color);
+            }
+        };
+        initUser();
+    }, []);
+
+    // Subscribe to comments when session is loaded
+    useEffect(() => {
+        if (sessionId) {
+            const unsubscribe = subscribeToComments(sessionId, (updatedComments) => {
+                setComments(updatedComments);
+            });
+            unsubscribeCommentsRef.current = unsubscribe;
+
+            return () => {
+                if (unsubscribeCommentsRef.current) {
+                    unsubscribeCommentsRef.current();
+                }
+            };
+        }
+    }, [sessionId]);
 
     // Load session if ID is present
     useEffect(() => {
@@ -355,6 +395,66 @@ const EcoNotasApp = ({ readOnly = false }) => {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
+    // Comment handlers
+    const handleAddComment = async (text) => {
+        if (!sessionId || !auth.currentUser) return;
+
+        try {
+            await addComment({
+                sessionId,
+                userId: auth.currentUser.uid,
+                userName,
+                userColor,
+                timestamp: currentTime,
+                text
+            });
+        } catch (error) {
+            console.error('Error adding comment:', error);
+            setAlertDialog({
+                isOpen: true,
+                type: 'error',
+                title: 'Error',
+                message: 'No se pudo agregar el comentario. Intenta nuevamente.'
+            });
+        }
+    };
+
+    const handleEditComment = async (commentId, newText) => {
+        try {
+            await updateComment(commentId, newText);
+        } catch (error) {
+            console.error('Error updating comment:', error);
+            setAlertDialog({
+                isOpen: true,
+                type: 'error',
+                title: 'Error',
+                message: 'No se pudo actualizar el comentario.'
+            });
+        }
+    };
+
+    const handleDeleteComment = async (commentId) => {
+        try {
+            await deleteComment(commentId);
+        } catch (error) {
+            console.error('Error deleting comment:', error);
+            setAlertDialog({
+                isOpen: true,
+                type: 'error',
+                title: 'Error',
+                message: 'No se pudo eliminar el comentario.'
+            });
+        }
+    };
+
+    const handleSeekToComment = (timestamp) => {
+        if (audioPlayerRef.current) {
+            audioPlayerRef.current.currentTime = timestamp / 1000;
+            setCurrentTime(timestamp);
+            redrawCanvas(timestamp, false);
+        }
+    };
+
     const handleSaveSession = async () => {
         if (!audioBlob || !auth.currentUser) return;
         if (!sessionName.trim()) {
@@ -433,6 +533,20 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 </div>
 
                 <div className="flex gap-2 items-center">
+                    {sessionId && (
+                        <button
+                            onClick={() => setShowCommentPanel(!showCommentPanel)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full font-semibold transition-all ${showCommentPanel
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                }`}
+                        >
+                            <MessageSquare className="w-4 h-4" />
+                            {comments.length > 0 && (
+                                <span className="text-sm">{comments.length}</span>
+                            )}
+                        </button>
+                    )}
                     {readOnly && (
                         <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 text-xs font-bold rounded-full border border-indigo-500/30">
                             SOLO LECTURA
@@ -525,14 +639,25 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 )}
 
                 {audioUrl && audioPlayerRef.current && (
-                    <input
-                        type="range"
-                        min="0"
-                        max={audioPlayerRef.current.duration || duration}
-                        value={currentTime / 1000}
-                        onChange={handleSeek}
-                        className="w-full h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer mb-4 accent-indigo-500"
-                    />
+                    <div className="relative mb-4">
+                        <input
+                            type="range"
+                            min="0"
+                            max={audioPlayerRef.current.duration || duration}
+                            value={currentTime / 1000}
+                            onChange={handleSeek}
+                            className="w-full h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                        />
+                        {/* Comment markers on timeline */}
+                        {comments.map((comment) => (
+                            <CommentMarker
+                                key={comment.id}
+                                comment={comment}
+                                duration={duration * 1000}
+                                onSeek={handleSeekToComment}
+                            />
+                        ))}
+                    </div>
                 )}
 
                 <div className="flex items-center justify-center gap-6">
@@ -638,6 +763,25 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 message={confirmDialog.message}
                 variant={confirmDialog.variant}
             />
+
+            {/* Comment Panel */}
+            {sessionId && (
+                <CommentPanel
+                    isOpen={showCommentPanel}
+                    onClose={() => setShowCommentPanel(false)}
+                    sessionId={sessionId}
+                    comments={comments}
+                    currentTime={currentTime}
+                    onSeekToTime={handleSeekToComment}
+                    userId={auth.currentUser?.uid}
+                    userName={userName}
+                    userColor={userColor}
+                    canEdit={!readOnly}
+                    onAddComment={handleAddComment}
+                    onEditComment={handleEditComment}
+                    onDeleteComment={handleDeleteComment}
+                />
+            )}
         </div>
     );
 };
