@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously } from "firebase/auth";
-import { getFirestore, collection, addDoc, getDoc, doc, query, where, getDocs, orderBy, deleteDoc, updateDoc } from "firebase/firestore";
+import { getFirestore, collection, addDoc, getDoc, doc, query, where, getDocs, orderBy, deleteDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // TODO: Replace with your actual Firebase project configuration
@@ -117,6 +117,98 @@ export const updateSession = async (sessionId, updates) => {
         return true;
     } catch (error) {
         console.error("Error updating session:", error);
+        throw error;
+    }
+};
+
+// ============================================
+// COMMENTS MANAGEMENT
+// ============================================
+
+// Add a comment to a session
+export const addComment = async (commentData) => {
+    try {
+        // commentData should include: sessionId, userId, userName, userColor, timestamp, text
+        const docRef = await addDoc(collection(db, "comments"), {
+            ...commentData,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
+        return docRef.id;
+    } catch (error) {
+        console.error("Error adding comment:", error);
+        throw error;
+    }
+};
+
+// Get all comments for a specific session
+export const getSessionComments = async (sessionId) => {
+    try {
+        const q = query(
+            collection(db, "comments"),
+            where("sessionId", "==", sessionId),
+            orderBy("timestamp", "asc")
+        );
+        const querySnapshot = await getDocs(q);
+        const comments = [];
+        querySnapshot.forEach((doc) => {
+            comments.push({ id: doc.id, ...doc.data() });
+        });
+        return comments;
+    } catch (error) {
+        console.error("Error getting comments:", error);
+        throw error;
+    }
+};
+
+// Update a comment's text
+export const updateComment = async (commentId, newText) => {
+    try {
+        const docRef = doc(db, "comments", commentId);
+        await updateDoc(docRef, {
+            text: newText,
+            updatedAt: new Date()
+        });
+        return true;
+    } catch (error) {
+        console.error("Error updating comment:", error);
+        throw error;
+    }
+};
+
+// Delete a comment
+export const deleteComment = async (commentId) => {
+    try {
+        const docRef = doc(db, "comments", commentId);
+        await deleteDoc(docRef);
+        return true;
+    } catch (error) {
+        console.error("Error deleting comment:", error);
+        throw error;
+    }
+};
+
+// Subscribe to real-time comment updates for a session
+export const subscribeToComments = (sessionId, callback) => {
+    try {
+        const q = query(
+            collection(db, "comments"),
+            where("sessionId", "==", sessionId),
+            orderBy("timestamp", "asc")
+        );
+
+        // Return unsubscribe function
+        return onSnapshot(q, (querySnapshot) => {
+            const comments = [];
+            querySnapshot.forEach((doc) => {
+                comments.push({ id: doc.id, ...doc.data() });
+            });
+            callback(comments);
+        }, (error) => {
+            console.error("Error in comment subscription:", error);
+        });
+    } catch (error) {
+        console.error("Error setting up comment subscription:", error);
         throw error;
     }
 };
