@@ -1,0 +1,35 @@
+:root {
+    /* Light theme */
+    --bg: #f9fafb;
+    --bg-card: #ffffff;
+    --text: #111827;
+    --accent: #6366f1;
+    --border: #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg: #111827;
+        --bg-card: #1f2937;
+        --text: #e5e7eb;
+        --accent: #818cf8;
+        --border: #374151;
+    }
+}
+
+/* Theme data attribute for manual toggle */
+[data-theme="light"] {
+    --bg: #f9fafb;
+    --bg-card: #ffffff;
+    --text: #111827;
+    --accent: #6366f1;
+    --border: #e5e7eb;
+}
+
+[data-theme="dark"] {
+    --bg: #111827;
+    --bg-card: #1f2937;
+    --text: #e5e7eb;
+    --accent: #818cf8;
+    --border: #374151;
+}
