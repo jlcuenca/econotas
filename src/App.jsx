@@ -1,9 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './styles/variables.css';
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import './styles/variables.css';
 import ThemeToggle from './components/ThemeToggle';
 import EcoNotasApp from './econotasapp';
 import Dashboard from './Dashboard';
