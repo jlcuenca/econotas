@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Play, Share2, Clock, Calendar, Trash2, Edit2, Check, X, Eye } from 'lucide-react';
+import { Plus, Play, Share2, Clock, Calendar, Trash2, Edit2, Check, X, Eye, Download } from 'lucide-react';
 import { signInUser, getUserSessions, auth, deleteSession, updateSession } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import AlertDialog from './components/AlertDialog';
@@ -267,6 +267,39 @@ const Dashboard = () => {
                                     </div>
 
                                     <div className="flex gap-2 items-center">
+                                        <button
+                                            onClick={async (e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                try {
+                                                    // Fetch comments for export
+                                                    const { getSessionComments } = await import('./firebase');
+                                                    const comments = await getSessionComments(session.id);
+                                                    const { exportSessionToJson } = await import('./utils/exportUtils');
+                                                    const success = exportSessionToJson(session, comments);
+                                                    if (success) {
+                                                        setAlertDialog({
+                                                            isOpen: true,
+                                                            type: 'success',
+                                                            title: 'Exportación exitosa',
+                                                            message: 'La sesión se ha descargado correctamente.'
+                                                        });
+                                                    }
+                                                } catch (error) {
+                                                    console.error("Export error:", error);
+                                                    setAlertDialog({
+                                                        isOpen: true,
+                                                        type: 'error',
+                                                        title: 'Error de exportación',
+                                                        message: 'No se pudo exportar la sesión.'
+                                                    });
+                                                }
+                                            }}
+                                            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                                            title="Exportar a JSON"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                        </button>
                                         <button
                                             onClick={(e) => startEditing(e, session)}
                                             className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"

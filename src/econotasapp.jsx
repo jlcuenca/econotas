@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2, MessageSquare, Star } from 'lucide-react';
+import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2, MessageSquare, Star, Download } from 'lucide-react';
 import { uploadAudio, saveSession, getSession, auth, addComment, updateComment, deleteComment, subscribeToComments, incrementViewCount, addRating, getUserRating } from './firebase';
 import AlertDialog from './components/AlertDialog';
 import ConfirmDialog from './components/ConfirmDialog';
@@ -34,6 +34,7 @@ const EcoNotasApp = ({ readOnly = false }) => {
 
     // Persistence state
     const [sessionName, setSessionName] = useState('');
+    const [createdAt, setCreatedAt] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(!!sessionId);
 
@@ -102,6 +103,7 @@ const EcoNotasApp = ({ readOnly = false }) => {
                     const sessionData = await getSession(sessionId);
                     if (sessionData) {
                         setSessionName(sessionData.sessionName);
+                        setCreatedAt(sessionData.createdAt ? (sessionData.createdAt.toDate ? sessionData.createdAt.toDate() : new Date(sessionData.createdAt)) : new Date());
                         setAudioUrl(sessionData.audioUrl);
                         setStrokes(JSON.parse(sessionData.strokes));
                         setDuration(sessionData.durationMs / 1000);
@@ -505,6 +507,38 @@ const EcoNotasApp = ({ readOnly = false }) => {
         }
     };
 
+    const handleExportSession = async () => {
+        try {
+            const { exportSessionToJson } = await import('./utils/exportUtils');
+            const sessionData = {
+                id: sessionId,
+                sessionName: sessionName,
+                createdAt: createdAt || new Date(),
+                durationMs: duration * 1000,
+                audioUrl: audioUrl,
+                strokes: strokes
+            };
+
+            const success = exportSessionToJson(sessionData, comments);
+            if (success) {
+                setAlertDialog({
+                    isOpen: true,
+                    type: 'success',
+                    title: 'Exportación exitosa',
+                    message: 'La sesión se ha descargado correctamente.'
+                });
+            }
+        } catch (error) {
+            console.error("Export error:", error);
+            setAlertDialog({
+                isOpen: true,
+                type: 'error',
+                title: 'Error de exportación',
+                message: 'No se pudo exportar la sesión.'
+            });
+        }
+    };
+
     const handleSaveSession = async () => {
         if (!audioBlob || !auth.currentUser) return;
         if (!sessionName.trim()) {
@@ -610,6 +644,15 @@ const EcoNotasApp = ({ readOnly = false }) => {
                         <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 text-xs font-bold rounded-full border border-indigo-500/30">
                             SOLO LECTURA
                         </span>
+                    )}
+                    {sessionId && (
+                        <button
+                            onClick={handleExportSession}
+                            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+                            title="Exportar a JSON"
+                        >
+                            <Download className="w-5 h-5" />
+                        </button>
                     )}
                     <ThemeSelector />
                 </div>
