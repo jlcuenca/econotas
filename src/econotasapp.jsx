@@ -9,6 +9,7 @@ import DrawingToolbar from './components/DrawingToolbar';
 import CommentPanel from './components/CommentPanel';
 import CommentMarker from './components/CommentMarker';
 import RatingModal from './components/RatingModal';
+import ThemeSelector from './components/ThemeSelector';
 import { useDrawingHistory } from './hooks/useDrawingHistory';
 import { MAX_RECORDING_DURATION_MS, RECORDING_WARNING_TIME_MS, DEFAULT_COLOR, DEFAULT_THICKNESS } from './utils/constants';
 import { generateDisplayName, getUserColor } from './utils/userUtils';
@@ -610,6 +611,7 @@ const EcoNotasApp = ({ readOnly = false }) => {
                             SOLO LECTURA
                         </span>
                     )}
+                    <ThemeSelector />
                 </div>
             </div>
 

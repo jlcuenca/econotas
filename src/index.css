@@ -7,9 +7,20 @@
     line-height: 1.5;
     font-weight: 400;
 
+    /* Theme Variables Default (Dark Slate) */
+    --color-bg-primary: #0f172a;
+    --color-bg-secondary: #1e293b;
+    --color-bg-tertiary: #334155;
+    --color-text-primary: #f1f5f9;
+    --color-text-secondary: #94a3b8;
+    --color-accent-primary: #6366f1;
+    --color-accent-hover: #4f46e5;
+    --color-accent-light: rgba(99, 102, 241, 0.1);
+    --color-border: #334155;
+
     color-scheme: dark;
-    color: rgba(255, 255, 255, 0.87);
-    background-color: #0f172a;
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-primary);
 
     font-synthesis: none;
     text-rendering: optimizeLegibility;
