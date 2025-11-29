@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2, MessageSquare, Star, Download } from 'lucide-react';
+import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2, MessageSquare, Star, Download, SlidersHorizontal } from 'lucide-react';
 import { uploadAudio, saveSession, getSession, auth, addComment, updateComment, deleteComment, subscribeToComments, incrementViewCount, addRating, getUserRating } from './firebase';
 import AlertDialog from './components/AlertDialog';
 import ConfirmDialog from './components/ConfirmDialog';
@@ -47,6 +47,7 @@ const EcoNotasApp = ({ readOnly = false }) => {
 
     // Comments state
     const [showCommentPanel, setShowCommentPanel] = useState(false);
+    const [showToolbar, setShowToolbar] = useState(true);
     const [comments, setComments] = useState([]);
     const [userName, setUserName] = useState('');
     const [userColor, setUserColor] = useState('#6366f1');
@@ -617,6 +618,13 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 </div>
 
                 <div className="flex gap-2 items-center">
+                    <button
+                        onClick={() => setShowToolbar(!showToolbar)}
+                        className={`p-2 rounded-lg transition-colors ${showToolbar ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}
+                        title={showToolbar ? "Ocultar herramientas" : "Mostrar herramientas"}
+                    >
+                        <SlidersHorizontal className="w-5 h-5" />
+                    </button>
                     {sessionId && (
                         <button
                             onClick={() => setShowRatingModal(true)}
@@ -676,19 +684,21 @@ const EcoNotasApp = ({ readOnly = false }) => {
                     readOnly={readOnly}
                 />
 
-                <DrawingToolbar
-                    currentTool={currentTool}
-                    onToolChange={setCurrentTool}
-                    penColor={penColor}
-                    onColorChange={setPenColor}
-                    penThickness={penThickness}
-                    onThicknessChange={setPenThickness}
-                    canUndo={canUndo && mode !== 'RECORDING'}
-                    canRedo={canRedo && mode !== 'RECORDING'}
-                    onUndo={undo}
-                    onRedo={redo}
-                    disabled={mode === 'PLAYING' || readOnly}
-                />
+                {showToolbar && (
+                    <DrawingToolbar
+                        currentTool={currentTool}
+                        onToolChange={setCurrentTool}
+                        penColor={penColor}
+                        onColorChange={setPenColor}
+                        penThickness={penThickness}
+                        onThicknessChange={setPenThickness}
+                        canUndo={canUndo && mode !== 'RECORDING'}
+                        canRedo={canRedo && mode !== 'RECORDING'}
+                        onUndo={undo}
+                        onRedo={redo}
+                        disabled={mode === 'PLAYING' || readOnly}
+                    />
+                )}
 
                 {mode === 'IDLE' && strokes.length === 0 && !readOnly && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
