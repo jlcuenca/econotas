@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2, MessageSquare, Star, Download, SlidersHorizontal } from 'lucide-react';
-import { uploadAudio, saveSession, getSession, auth, addComment, updateComment, deleteComment, subscribeToComments, incrementViewCount, addRating, getUserRating } from './firebase';
+import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2, MessageSquare, Star, Download, SlidersHorizontal, FileText } from 'lucide-react';
+import { uploadAudio, saveSession, getSession, auth, addComment, updateComment, deleteComment, subscribeToComments, incrementViewCount, addRating, getUserRating, saveTranscription, getTranscription } from './firebase';
+import TranscriptionPanel from './components/TranscriptionPanel';
 import AlertDialog from './components/AlertDialog';
 import ConfirmDialog from './components/ConfirmDialog';
 import InfiniteCanvas from './components/InfiniteCanvas';
@@ -11,6 +12,7 @@ import CommentMarker from './components/CommentMarker';
 import RatingModal from './components/RatingModal';
 import ThemeSelector from './components/ThemeSelector';
 import { useDrawingHistory } from './hooks/useDrawingHistory';
+import { useTranscription } from './hooks/useTranscription';
 import { MAX_RECORDING_DURATION_MS, RECORDING_WARNING_TIME_MS, DEFAULT_COLOR, DEFAULT_THICKNESS } from './utils/constants';
 import { generateDisplayName, getUserColor } from './utils/userUtils';
 
@@ -49,6 +51,18 @@ const EcoNotasApp = ({ readOnly = false }) => {
     const [showCommentPanel, setShowCommentPanel] = useState(false);
     const [showToolbar, setShowToolbar] = useState(true);
     const [comments, setComments] = useState([]);
+
+    // Transcription state
+    const [showTranscription, setShowTranscription] = useState(false);
+    const {
+        segments: transcriptionSegments,
+        isTranscribing,
+        error: transcriptionError,
+        isSupported: isTranscriptionSupported,
+        startTranscription,
+        stopTranscription,
+        getFullText
+    } = useTranscription('es-ES');
     const [userName, setUserName] = useState('');
     const [userColor, setUserColor] = useState('#6366f1');
 
@@ -253,6 +267,11 @@ const EcoNotasApp = ({ readOnly = false }) => {
             setDuration(0);
             setMode('RECORDING');
 
+            // Start transcription if supported
+            if (isTranscriptionSupported) {
+                startTranscription(Date.now());
+            }
+
             const ctx = canvasRef.current.getContext('2d');
             ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         } catch (err) {
@@ -271,6 +290,9 @@ const EcoNotasApp = ({ readOnly = false }) => {
             mediaRecorderRef.current.stop();
             mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
             setMode('IDLE');
+
+            // Stop transcription
+            stopTranscription();
         }
     };
 
@@ -568,7 +590,17 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 strokes: JSON.stringify(strokes)
             };
 
-            await saveSession(sessionData);
+            const savedSessionId = await saveSession(sessionData);
+
+            // 3. Save transcription if available
+            if (transcriptionSegments.length > 0) {
+                await saveTranscription(savedSessionId, {
+                    segments: transcriptionSegments,
+                    fullText: getFullText(),
+                    language: 'es-ES'
+                });
+            }
+
             setAlertDialog({
                 isOpen: true,
                 type: 'success',
@@ -645,6 +677,21 @@ const EcoNotasApp = ({ readOnly = false }) => {
                             <MessageSquare className="w-4 h-4" />
                             {comments.length > 0 && (
                                 <span className="text-sm">{comments.length}</span>
+                            )}
+                        </button>
+                    )}
+                    {(sessionId || transcriptionSegments.length > 0) && (
+                        <button
+                            onClick={() => setShowTranscription(!showTranscription)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full font-semibold transition-all ${showTranscription
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                }`}
+                            title="Transcripción"
+                        >
+                            <FileText className="w-4 h-4" />
+                            {transcriptionSegments.length > 0 && (
+                                <span className="text-sm">{transcriptionSegments.length}</span>
                             )}
                         </button>
                     )}
@@ -907,6 +954,34 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 initialRating={userRating}
                 sessionName={sessionName}
             />
+
+            {/* Transcription Panel */}
+            {showTranscription && (
+                <div className="fixed right-0 top-16 bottom-0 w-96 z-40 shadow-2xl">
+                    <TranscriptionPanel
+                        segments={transcriptionSegments}
+                        currentTime={currentTime}
+                        onSeekToTime={(time) => {
+                            if (audioPlayerRef.current) {
+                                audioPlayerRef.current.currentTime = time / 1000;
+                                setCurrentTime(time);
+                                redrawCanvas(time, false);
+                            }
+                        }}
+                        onExport={() => {
+                            const { exportAsText } = require('./utils/transcriptionExport');
+                            exportAsText(transcriptionSegments, sessionName);
+                            setAlertDialog({
+                                isOpen: true,
+                                type: 'success',
+                                title: 'Exportación exitosa',
+                                message: 'La transcripción se ha descargado correctamente.'
+                            });
+                        }}
+                        isRecording={mode === 'RECORDING'}
+                    />
+                </div>
+            )}
         </div>
     );
 };

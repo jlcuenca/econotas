@@ -313,4 +313,49 @@ export const getUserRating = async (sessionId, userId) => {
     }
 };
 
+// ==================== TRANSCRIPTION FUNCTIONS ====================
+
+/**
+ * Save transcription for a session
+ * @param {string} sessionId - Session ID
+ * @param {Object} transcription - Transcription object with segments and metadata
+ */
+export const saveTranscription = async (sessionId, transcription) => {
+    try {
+        const sessionRef = doc(db, "sessions", sessionId);
+        await updateDoc(sessionRef, {
+            transcription: {
+                segments: transcription.segments || [],
+                fullText: transcription.fullText || '',
+                language: transcription.language || 'es-ES',
+                generatedAt: new Date()
+            }
+        });
+        console.log('✅ Transcription saved successfully');
+    } catch (error) {
+        console.error("Error saving transcription:", error);
+        throw error;
+    }
+};
+
+/**
+ * Get transcription for a session
+ * @param {string} sessionId - Session ID
+ * @returns {Object|null} Transcription object or null if not found
+ */
+export const getTranscription = async (sessionId) => {
+    try {
+        const sessionRef = doc(db, "sessions", sessionId);
+        const sessionSnap = await getDoc(sessionRef);
+
+        if (sessionSnap.exists() && sessionSnap.data().transcription) {
+            return sessionSnap.data().transcription;
+        }
+        return null;
+    } catch (error) {
+        console.error("Error getting transcription:", error);
+        throw error;
+    }
+};
+
 export { auth, db, storage };
