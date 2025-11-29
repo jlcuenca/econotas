@@ -56,7 +56,7 @@ const CommentItem = ({ comment, currentUserId, isActive, onSeek, onEdit, onDelet
 
                         {/* Action buttons - only show for own comments */}
                         {isOwnComment && !isEditing && (
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();

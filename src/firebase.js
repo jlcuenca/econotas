@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, signInAnonymously } from "firebase/auth";
-import { getFirestore, collection, addDoc, getDoc, doc, query, where, getDocs, orderBy, deleteDoc, updateDoc, onSnapshot } from "firebase/firestore";
+import { getFirestore, collection, addDoc, getDoc, doc, query, where, getDocs, orderBy, deleteDoc, updateDoc, onSnapshot, increment, setDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 // TODO: Replace with your actual Firebase project configuration
@@ -124,6 +124,16 @@ export const updateSession = async (sessionId, updates) => {
 // ============================================
 // COMMENTS MANAGEMENT
 // ============================================
+// 
+// REQUIRED FIRESTORE INDEX:
+// To ensure optimal performance for comment queries, create a composite index:
+// Collection: comments
+// Fields: sessionId (Ascending), timestamp (Ascending)
+// 
+// This index is required for the queries below that filter by sessionId and order by timestamp.
+// Firebase will prompt you to create this index automatically when you first run these queries,
+// or you can create it manually in the Firebase Console under Firestore Database > Indexes.
+//
 
 // Add a comment to a session
 export const addComment = async (commentData) => {
@@ -210,6 +220,96 @@ export const subscribeToComments = (sessionId, callback) => {
     } catch (error) {
         console.error("Error setting up comment subscription:", error);
         throw error;
+    }
+};
+
+// ============================================
+// SESSION METRICS (VIEWS & RATINGS)
+// ============================================
+
+// Increment view count for a session
+export const incrementViewCount = async (sessionId) => {
+    try {
+        const docRef = doc(db, "sessions", sessionId);
+        await updateDoc(docRef, {
+            viewCount: increment(1)
+        });
+        return true;
+    } catch (error) {
+        console.error("Error incrementing view count:", error);
+        // Don't throw error to avoid disrupting user experience
+        return false;
+    }
+};
+
+// Add or update a rating for a session
+export const addRating = async (sessionId, userId, rating, comment = "") => {
+    try {
+        // 1. Create/Update rating document in 'ratings' collection
+        // Use composite ID to ensure one rating per user per session
+        const ratingId = `${sessionId}_${userId}`;
+        const ratingRef = doc(db, "ratings", ratingId);
+
+        await setDoc(ratingRef, {
+            sessionId,
+            userId,
+            rating,
+            comment,
+            updatedAt: new Date()
+        }, { merge: true });
+
+        // 2. Recalculate average rating for the session
+        // Note: In a high-traffic app, this should be done via Cloud Functions
+        // For this scale, client-side calculation is acceptable
+
+        const q = query(
+            collection(db, "ratings"),
+            where("sessionId", "==", sessionId)
+        );
+
+        const querySnapshot = await getDocs(q);
+        let totalRating = 0;
+        let count = 0;
+        const breakdown = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+
+        querySnapshot.forEach((doc) => {
+            const r = doc.data().rating;
+            totalRating += r;
+            count++;
+            if (breakdown[r] !== undefined) breakdown[r]++;
+        });
+
+        const average = count > 0 ? totalRating / count : 0;
+
+        // 3. Update session document with new stats
+        const sessionRef = doc(db, "sessions", sessionId);
+        await updateDoc(sessionRef, {
+            ratingAverage: average,
+            ratingCount: count,
+            ratingBreakdown: breakdown
+        });
+
+        return { average, count };
+    } catch (error) {
+        console.error("Error adding rating:", error);
+        throw error;
+    }
+};
+
+// Get user's existing rating for a session
+export const getUserRating = async (sessionId, userId) => {
+    try {
+        const ratingId = `${sessionId}_${userId}`;
+        const docRef = doc(db, "ratings", ratingId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+            return docSnap.data();
+        }
+        return null;
+    } catch (error) {
+        console.error("Error getting user rating:", error);
+        return null;
     }
 };
 

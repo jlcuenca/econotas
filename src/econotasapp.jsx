@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2, MessageSquare } from 'lucide-react';
-import { uploadAudio, saveSession, getSession, auth, addComment, updateComment, deleteComment, subscribeToComments } from './firebase';
+import { Mic, Square, Play, Pause, PenTool, Clock, RotateCcw, Save, ArrowLeft, Share2, MessageSquare, Star } from 'lucide-react';
+import { uploadAudio, saveSession, getSession, auth, addComment, updateComment, deleteComment, subscribeToComments, incrementViewCount, addRating, getUserRating } from './firebase';
 import AlertDialog from './components/AlertDialog';
 import ConfirmDialog from './components/ConfirmDialog';
 import InfiniteCanvas from './components/InfiniteCanvas';
 import DrawingToolbar from './components/DrawingToolbar';
 import CommentPanel from './components/CommentPanel';
 import CommentMarker from './components/CommentMarker';
+import RatingModal from './components/RatingModal';
 import { useDrawingHistory } from './hooks/useDrawingHistory';
 import { MAX_RECORDING_DURATION_MS, RECORDING_WARNING_TIME_MS, DEFAULT_COLOR, DEFAULT_THICKNESS } from './utils/constants';
 import { generateDisplayName, getUserColor } from './utils/userUtils';
@@ -47,6 +48,11 @@ const EcoNotasApp = ({ readOnly = false }) => {
     const [comments, setComments] = useState([]);
     const [userName, setUserName] = useState('');
     const [userColor, setUserColor] = useState('#6366f1');
+
+    // Rating state
+    const [showRatingModal, setShowRatingModal] = useState(false);
+    const [userRating, setUserRating] = useState(0);
+    const [hasViewed, setHasViewed] = useState(false);
 
     const canvasRef = useRef(null);
     const mediaRecorderRef = useRef(null);
@@ -116,6 +122,26 @@ const EcoNotasApp = ({ readOnly = false }) => {
             loadData();
         }
     }, [sessionId]);
+
+    // Increment view count and check rating
+    useEffect(() => {
+        if (sessionId && !hasViewed) {
+            const initSessionStats = async () => {
+                // Increment view count
+                await incrementViewCount(sessionId);
+                setHasViewed(true);
+
+                // Check if user already rated
+                if (auth.currentUser) {
+                    const ratingData = await getUserRating(sessionId, auth.currentUser.uid);
+                    if (ratingData) {
+                        setUserRating(ratingData.rating);
+                    }
+                }
+            };
+            initSessionStats();
+        }
+    }, [sessionId, hasViewed]);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -455,6 +481,29 @@ const EcoNotasApp = ({ readOnly = false }) => {
         }
     };
 
+    const handleRateSession = async (rating, comment) => {
+        if (!sessionId || !auth.currentUser) return;
+
+        try {
+            await addRating(sessionId, auth.currentUser.uid, rating, comment);
+            setUserRating(rating);
+            setAlertDialog({
+                isOpen: true,
+                type: 'success',
+                title: '¡Gracias!',
+                message: 'Tu calificación ha sido guardada.'
+            });
+        } catch (error) {
+            console.error("Error saving rating:", error);
+            setAlertDialog({
+                isOpen: true,
+                type: 'error',
+                title: 'Error',
+                message: 'No se pudo guardar la calificación.'
+            });
+        }
+    };
+
     const handleSaveSession = async () => {
         if (!audioBlob || !auth.currentUser) return;
         if (!sessionName.trim()) {
@@ -535,10 +584,19 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 <div className="flex gap-2 items-center">
                     {sessionId && (
                         <button
+                            onClick={() => setShowRatingModal(true)}
+                            className="p-2 text-slate-400 hover:text-yellow-400 transition-colors"
+                            title={userRating > 0 ? `Tu calificación: ${userRating} estrellas` : "Calificar sesión"}
+                        >
+                            <Star className={`w-5 h-5 ${userRating > 0 ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                        </button>
+                    )}
+                    {sessionId && (
+                        <button
                             onClick={() => setShowCommentPanel(!showCommentPanel)}
                             className={`flex items-center gap-2 px-3 py-1.5 rounded-full font-semibold transition-all ${showCommentPanel
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                                 }`}
                         >
                             <MessageSquare className="w-4 h-4" />
@@ -633,6 +691,10 @@ const EcoNotasApp = ({ readOnly = false }) => {
                             onEnded={() => {
                                 console.log("✅ Ended");
                                 setMode('IDLE');
+                                // Show rating modal if not rated yet
+                                if (sessionId && userRating === 0) {
+                                    setShowRatingModal(true);
+                                }
                             }}
                         />
                     </div>
@@ -782,6 +844,14 @@ const EcoNotasApp = ({ readOnly = false }) => {
                     onDeleteComment={handleDeleteComment}
                 />
             )}
+
+            <RatingModal
+                isOpen={showRatingModal}
+                onClose={() => setShowRatingModal(false)}
+                onRate={handleRateSession}
+                initialRating={userRating}
+                sessionName={sessionName}
+            />
         </div>
     );
 };

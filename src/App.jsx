@@ -15,6 +15,7 @@ function App() {
                 <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/new" element={<EcoNotasApp />} />
+                    <Route path="/session/:sessionId" element={<EcoNotasApp />} />
                     <Route path="/share/:sessionId" element={<EcoNotasApp readOnly={true} />} />
                 </Routes>
             </div>

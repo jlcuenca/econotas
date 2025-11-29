@@ -18,7 +18,7 @@ const CommentMarker = ({ comment, duration, onSeek }) => {
         >
             {/* Marker dot */}
             <div
-                className="w-3 h-3 rounded-full border-2 border-white shadow-lg transition-transform group-hover:scale-150"
+                className="w-3 h-3 rounded-full border-2 border-white shadow-lg transition-transform duration-200 ease-out group-hover:scale-150"
                 style={{ backgroundColor: comment.userColor }}
             />
 

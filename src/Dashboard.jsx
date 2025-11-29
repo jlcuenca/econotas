@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Play, Share2, Clock, Calendar, Trash2, Edit2, Check, X } from 'lucide-react';
+import { Plus, Play, Share2, Clock, Calendar, Trash2, Edit2, Check, X, Eye } from 'lucide-react';
 import { signInUser, getUserSessions, auth, deleteSession, updateSession } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import AlertDialog from './components/AlertDialog';
 import ConfirmDialog from './components/ConfirmDialog';
+import RatingStars from './components/RatingStars';
 
 const Dashboard = () => {
     const [sessions, setSessions] = useState([]);
@@ -198,7 +199,7 @@ const Dashboard = () => {
                         {sessions.map(session => (
                             <Link
                                 key={session.id}
-                                to={`/share/${session.id}`}
+                                to={`/session/${session.id}`}
                                 className="block bg-slate-800 hover:bg-slate-750 border border-slate-700 rounded-xl p-4 transition-all hover:border-indigo-500/50 hover:shadow-lg group"
                             >
                                 <div className="flex items-center justify-between">
@@ -249,6 +250,16 @@ const Dashboard = () => {
                                                             <Clock className="w-3 h-3" />
                                                             {formatDuration(session.durationMs)}
                                                         </span>
+                                                        <span className="flex items-center gap-1" title={`${session.viewCount || 0} reproducciones`}>
+                                                            <Eye className="w-3 h-3" />
+                                                            {session.viewCount || 0}
+                                                        </span>
+                                                        {session.ratingAverage > 0 && (
+                                                            <span className="flex items-center gap-1" title={`Calificación: ${session.ratingAverage.toFixed(1)} (${session.ratingCount} votos)`}>
+                                                                <RatingStars rating={session.ratingAverage} size={12} />
+                                                                <span className="text-xs">({session.ratingCount})</span>
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </>
                                             )}
