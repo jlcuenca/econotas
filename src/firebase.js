@@ -358,4 +358,249 @@ export const getTranscription = async (sessionId) => {
     }
 };
 
+// ==================== FOLDER MANAGEMENT ====================
+
+/**
+ * Create a new folder
+ * @param {Object} folderData - Folder data (userId, name, color)
+ * @returns {string} Folder ID
+ */
+export const createFolder = async (folderData) => {
+    try {
+        const docRef = await addDoc(collection(db, "folders"), {
+            ...folderData,
+            createdAt: new Date(),
+            sessionCount: 0
+        });
+        return docRef.id;
+    } catch (error) {
+        console.error("Error creating folder:", error);
+        throw error;
+    }
+};
+
+/**
+ * Get all folders for a user
+ * @param {string} userId - User ID
+ * @returns {Array} Array of folder objects
+ */
+export const getUserFolders = async (userId) => {
+    try {
+        const q = query(
+            collection(db, "folders"),
+            where("userId", "==", userId),
+            orderBy("createdAt", "asc")
+        );
+        const querySnapshot = await getDocs(q);
+        const folders = [];
+        querySnapshot.forEach((doc) => {
+            folders.push({ id: doc.id, ...doc.data() });
+        });
+        return folders;
+    } catch (error) {
+        console.error("Error getting folders:", error);
+        throw error;
+    }
+};
+
+/**
+ * Update folder metadata
+ * @param {string} folderId - Folder ID
+ * @param {Object} updates - Fields to update
+ */
+export const updateFolder = async (folderId, updates) => {
+    try {
+        const docRef = doc(db, "folders", folderId);
+        await updateDoc(docRef, updates);
+        return true;
+    } catch (error) {
+        console.error("Error updating folder:", error);
+        throw error;
+    }
+};
+
+/**
+ * Delete a folder and move its sessions to "All Sessions" (null folder)
+ * @param {string} folderId - Folder ID
+ */
+export const deleteFolder = async (folderId) => {
+    try {
+        // First, move all sessions in this folder to null (All Sessions)
+        const sessionsQuery = query(
+            collection(db, "sessions"),
+            where("folderId", "==", folderId)
+        );
+        const sessionsSnapshot = await getDocs(sessionsQuery);
+
+        // Update all sessions to remove folder association
+        const updatePromises = [];
+        sessionsSnapshot.forEach((sessionDoc) => {
+            updatePromises.push(
+                updateDoc(doc(db, "sessions", sessionDoc.id), { folderId: null })
+            );
+        });
+        await Promise.all(updatePromises);
+
+        // Then delete the folder
+        await deleteDoc(doc(db, "folders", folderId));
+        return true;
+    } catch (error) {
+        console.error("Error deleting folder:", error);
+        throw error;
+    }
+};
+
+/**
+ * Move a session to a folder
+ * @param {string} sessionId - Session ID
+ * @param {string|null} folderId - Folder ID or null for "All Sessions"
+ */
+export const moveSessionToFolder = async (sessionId, folderId) => {
+    try {
+        const docRef = doc(db, "sessions", sessionId);
+        await updateDoc(docRef, { folderId: folderId });
+        return true;
+    } catch (error) {
+        console.error("Error moving session to folder:", error);
+        throw error;
+    }
+};
+
+/**
+ * Get session count for a folder
+ * @param {string} folderId - Folder ID
+ * @returns {number} Number of sessions in folder
+ */
+export const getFolderSessionCount = async (folderId) => {
+    try {
+        const q = query(
+            collection(db, "sessions"),
+            where("folderId", "==", folderId)
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.size;
+    } catch (error) {
+        console.error("Error getting folder session count:", error);
+        return 0;
+    }
+};
+
+// ==================== TAGS & FAVORITES ====================
+
+/**
+ * Update session tags
+ * @param {string} sessionId - Session ID
+ * @param {Array<string>} tags - Array of tag strings
+ */
+export const updateSessionTags = async (sessionId, tags) => {
+    try {
+        const docRef = doc(db, "sessions", sessionId);
+        await updateDoc(docRef, { tags: tags || [] });
+        return true;
+    } catch (error) {
+        console.error("Error updating session tags:", error);
+        throw error;
+    }
+};
+
+/**
+ * Toggle favorite status for a session
+ * @param {string} sessionId - Session ID
+ * @param {boolean} isFavorite - New favorite status
+ */
+export const toggleFavorite = async (sessionId, isFavorite) => {
+    try {
+        const docRef = doc(db, "sessions", sessionId);
+        await updateDoc(docRef, { isFavorite: isFavorite });
+        return true;
+    } catch (error) {
+        console.error("Error toggling favorite:", error);
+        throw error;
+    }
+};
+
+/**
+ * Get all unique tags from user's sessions
+ * @param {string} userId - User ID
+ * @returns {Array<{tag: string, count: number}>} Array of tags with usage counts
+ */
+export const getUserTags = async (userId) => {
+    try {
+        const q = query(
+            collection(db, "sessions"),
+            where("userId", "==", userId)
+        );
+        const querySnapshot = await getDocs(q);
+
+        const tagCounts = {};
+        querySnapshot.forEach((doc) => {
+            const tags = doc.data().tags || [];
+            tags.forEach(tag => {
+                tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+            });
+        });
+
+        return Object.entries(tagCounts).map(([tag, count]) => ({ tag, count }));
+    } catch (error) {
+        console.error("Error getting user tags:", error);
+        return [];
+    }
+};
+
+// ==================== BULK OPERATIONS ====================
+
+/**
+ * Bulk delete sessions
+ * @param {Array<string>} sessionIds - Array of session IDs to delete
+ */
+export const bulkDeleteSessions = async (sessionIds) => {
+    try {
+        const deletePromises = sessionIds.map(id => deleteSession(id));
+        await Promise.all(deletePromises);
+        return true;
+    } catch (error) {
+        console.error("Error bulk deleting sessions:", error);
+        throw error;
+    }
+};
+
+/**
+ * Bulk move sessions to folder
+ * @param {Array<string>} sessionIds - Array of session IDs
+ * @param {string|null} folderId - Target folder ID or null
+ */
+export const bulkMoveToFolder = async (sessionIds, folderId) => {
+    try {
+        const movePromises = sessionIds.map(id => moveSessionToFolder(id, folderId));
+        await Promise.all(movePromises);
+        return true;
+    } catch (error) {
+        console.error("Error bulk moving sessions:", error);
+        throw error;
+    }
+};
+
+/**
+ * Bulk add tags to sessions
+ * @param {Array<string>} sessionIds - Array of session IDs
+ * @param {Array<string>} tagsToAdd - Tags to add
+ */
+export const bulkAddTags = async (sessionIds, tagsToAdd) => {
+    try {
+        const updatePromises = sessionIds.map(async (id) => {
+            const sessionDoc = await getDoc(doc(db, "sessions", id));
+            if (sessionDoc.exists()) {
+                const currentTags = sessionDoc.data().tags || [];
+                const newTags = [...new Set([...currentTags, ...tagsToAdd])]; // Remove duplicates
+                await updateSessionTags(id, newTags);
+            }
+        });
+        await Promise.all(updatePromises);
+        return true;
+    } catch (error) {
+        console.error("Error bulk adding tags:", error);
+        throw error;
+    }
+};
+
 export { auth, db, storage };

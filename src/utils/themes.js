@@ -54,5 +54,19 @@ export const themes = {
             '--color-accent-light': 'rgba(249, 115, 22, 0.1)', // orange-500/10
             '--color-border': '#3f3f46', // zinc-700
         }
+    },
+    light: {
+        name: 'Light Clean',
+        colors: {
+            '--color-bg-primary': '#ffffff', // white
+            '--color-bg-secondary': '#f8fafc', // slate-50
+            '--color-bg-tertiary': '#f1f5f9', // slate-100
+            '--color-text-primary': '#0f172a', // slate-900
+            '--color-text-secondary': '#475569', // slate-600
+            '--color-accent-primary': '#6366f1', // indigo-500
+            '--color-accent-hover': '#4f46e5', // indigo-600
+            '--color-accent-light': 'rgba(99, 102, 241, 0.1)', // indigo-500/10
+            '--color-border': '#e2e8f0', // slate-200
+        }
     }
 };

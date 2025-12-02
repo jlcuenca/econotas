@@ -12,13 +12,29 @@ export const useTheme = () => {
 };
 
 export const ThemeProvider = ({ children }) => {
+    // Separate state for mode (dark/light) and theme (slate/ocean/etc)
+    const [mode, setMode] = useState(() => {
+        const savedMode = localStorage.getItem('econotas-mode');
+        return savedMode || 'dark';
+    });
+
     const [currentTheme, setCurrentTheme] = useState(() => {
         const savedTheme = localStorage.getItem('econotas-theme');
         return savedTheme && themes[savedTheme] ? savedTheme : 'slate';
     });
 
+    // Get the actual theme to apply based on mode
+    const getActiveTheme = () => {
+        if (mode === 'light') {
+            return 'light';
+        }
+        // In dark mode, use the selected theme (but not light)
+        return currentTheme === 'light' ? 'slate' : currentTheme;
+    };
+
     useEffect(() => {
-        const theme = themes[currentTheme];
+        const activeThemeKey = getActiveTheme();
+        const theme = themes[activeThemeKey];
         const root = document.documentElement;
 
         // Apply CSS variables
@@ -26,12 +42,21 @@ export const ThemeProvider = ({ children }) => {
             root.style.setProperty(key, value);
         });
 
+        // Save preferences
+        localStorage.setItem('econotas-mode', mode);
         localStorage.setItem('econotas-theme', currentTheme);
-    }, [currentTheme]);
+    }, [currentTheme, mode]);
+
+    const toggleMode = () => {
+        setMode(prev => prev === 'dark' ? 'light' : 'dark');
+    };
 
     const value = {
+        mode,
         currentTheme,
+        activeTheme: getActiveTheme(),
         setTheme: setCurrentTheme,
+        toggleMode,
         themes
     };
 

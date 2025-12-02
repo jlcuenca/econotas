@@ -587,7 +587,10 @@ const EcoNotasApp = ({ readOnly = false }) => {
                 createdAt: new Date(),
                 audioUrl: downloadUrl,
                 durationMs: duration * 1000,
-                strokes: JSON.stringify(strokes)
+                strokes: JSON.stringify(strokes),
+                folderId: null,
+                tags: [],
+                isFavorite: false
             };
 
             const savedSessionId = await saveSession(sessionData);
