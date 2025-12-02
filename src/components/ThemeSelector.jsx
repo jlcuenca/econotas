@@ -21,7 +21,7 @@ const ThemeSelector = () => {
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
                 title="Cambiar tema"
             >
-                <Palette className="w-5 h-5" />
+                {mode === 'dark' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
             </button>
 
             {isOpen && (
@@ -40,8 +40,8 @@ const ThemeSelector = () => {
                                 <button
                                     onClick={toggleMode}
                                     className={`flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${mode === 'dark'
-                                            ? 'bg-slate-700 text-white'
-                                            : 'text-slate-400 hover:text-slate-300'
+                                        ? 'bg-slate-700 text-white'
+                                        : 'text-slate-400 hover:text-slate-300'
                                         }`}
                                 >
                                     <Moon className="w-3.5 h-3.5" />
@@ -50,8 +50,8 @@ const ThemeSelector = () => {
                                 <button
                                     onClick={toggleMode}
                                     className={`flex-1 flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${mode === 'light'
-                                            ? 'bg-slate-700 text-white'
-                                            : 'text-slate-400 hover:text-slate-300'
+                                        ? 'bg-slate-700 text-white'
+                                        : 'text-slate-400 hover:text-slate-300'
                                         }`}
                                 >
                                     <Sun className="w-3.5 h-3.5" />
@@ -74,8 +74,8 @@ const ThemeSelector = () => {
                                             setIsOpen(false);
                                         }}
                                         className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${currentTheme === key
-                                                ? 'bg-indigo-500/10 text-indigo-400'
-                                                : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+                                            ? 'bg-indigo-500/10 text-indigo-400'
+                                            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
                                             }`}
                                     >
                                         <div className="flex items-center gap-2">

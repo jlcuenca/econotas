@@ -8,6 +8,7 @@ import AlertDialog from './components/AlertDialog';
 import ConfirmDialog from './components/ConfirmDialog';
 import RatingStars from './components/RatingStars';
 import ViewToggle from './components/ViewToggle';
+import ThemeSelector from './components/ThemeSelector';
 import SearchBar from './components/SearchBar';
 import SessionFilters from './components/SessionFilters';
 import FolderSidebar from './components/FolderSidebar';
@@ -40,6 +41,7 @@ const Dashboard = () => {
     const [selectedSessions, setSelectedSessions] = useState([]);
     const [tagDialogOpen, setTagDialogOpen] = useState(false);
     const [bulkTags, setBulkTags] = useState([]);
+    const [isSavingTags, setIsSavingTags] = useState(false);
 
     // View and filter states
     const [view, setView] = useState(() => localStorage.getItem('dashboard-view') || 'grid');
@@ -408,11 +410,36 @@ const Dashboard = () => {
     };
 
     const handleSaveBulkTags = async () => {
-        if (bulkTags.length === 0) return;
+        console.log('handleSaveBulkTags called', { bulkTags, selectedSessions });
+        if (bulkTags.length === 0) {
+            console.warn('No tags to save');
+            setAlertDialog({
+                isOpen: true,
+                type: 'warning',
+                title: 'Sin etiquetas',
+                message: 'Por favor agrega al menos una etiqueta antes de guardar.'
+            });
+            return;
+        }
+        if (selectedSessions.length === 0) {
+            console.warn('No sessions selected');
+            setAlertDialog({
+                isOpen: true,
+                type: 'warning',
+                title: 'Sin sesiones',
+                message: 'No hay sesiones seleccionadas.'
+            });
+            return;
+        }
+
+        setIsSavingTags(true);
         try {
+            console.log('Calling bulkAddTags...');
             await bulkAddTags(selectedSessions, bulkTags);
+            console.log('bulkAddTags completed, reloading sessions...');
             // Reload sessions to get updated tags
             await loadSessions(user.uid);
+            console.log('Sessions reloaded');
             setSelectedSessions([]);
             setTagDialogOpen(false);
             setBulkTags([]);
@@ -428,8 +455,10 @@ const Dashboard = () => {
                 isOpen: true,
                 type: 'error',
                 title: 'Error',
-                message: 'No se pudieron agregar las etiquetas.'
+                message: `No se pudieron agregar las etiquetas: ${error.message}`
             });
+        } finally {
+            setIsSavingTags(false);
         }
     };
 
@@ -576,12 +605,15 @@ const Dashboard = () => {
                             <h1 className="text-3xl font-bold tracking-tight mb-1">Mis Sesiones</h1>
                             <p className="text-slate-400">Gestiona tus grabaciones y notas</p>
                         </div>
-                        <Link
-                            to="/new"
-                            className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-bold transition-all shadow-lg shadow-indigo-900/20"
-                        >
-                            <Plus className="w-5 h-5" /> Nueva Sesión
-                        </Link>
+                        <div className="flex items-center gap-4">
+                            <ThemeSelector />
+                            <Link
+                                to="/new"
+                                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full font-bold transition-all shadow-lg shadow-indigo-900/20"
+                            >
+                                <Plus className="w-5 h-5" /> Nueva Sesión
+                            </Link>
+                        </div>
                     </header>
 
                     {/* Toolbar */}
@@ -651,7 +683,7 @@ const Dashboard = () => {
                             </Link>
                         </div>
                     ) : (
-                        <div className={view === 'grid' ? "grid gap-4" : "space-y-3"}>
+                        <div className={view === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-3"}>
                             {filteredAndSortedSessions.map(session => (
                                 <div
                                     key={session.id}
@@ -708,9 +740,13 @@ const Dashboard = () => {
                                                             <Clock className="w-3.5 h-3.5" />
                                                             {formatDuration(session.durationMs)}
                                                         </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <Eye className="w-3.5 h-3.5" />
+                                                            {session.viewCount || 0}
+                                                        </div>
                                                         {session.ratingAverage > 0 && (
                                                             <div className="flex items-center gap-1 text-yellow-500">
-                                                                <RatingStars rating={session.ratingAverage} size="xs" readOnly />
+                                                                <RatingStars rating={session.ratingAverage} size={14} readOnly />
                                                                 <span className="text-slate-400">({session.ratingCount})</span>
                                                             </div>
                                                         )}
@@ -839,9 +875,13 @@ const Dashboard = () => {
                             </button>
                             <button
                                 onClick={handleSaveBulkTags}
-                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                                disabled={isSavingTags || bulkTags.length === 0}
+                                className={`px-4 py-2 rounded-lg font-medium transition-colors ${isSavingTags || bulkTags.length === 0
+                                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                    }`}
                             >
-                                Guardar
+                                {isSavingTags ? 'Guardando...' : 'Guardar'}
                             </button>
                         </div>
                     </div>

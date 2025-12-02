@@ -44,7 +44,7 @@ const DrawingToolbar = ({
                         </Button>
                     </div>
 
-                    {/* Undo/Redo */}
+                    {/* Undo/Redo - Hidden for now
                     <div className="flex gap-2">
                         <Button
                             onClick={onUndo}
@@ -63,6 +63,7 @@ const DrawingToolbar = ({
                             <RotateCw className="w-5 h-5" />
                         </Button>
                     </div>
+                    */}
 
                     {/* Color Toggle (only show for pen) */}
                     {currentTool === 'pen' && (

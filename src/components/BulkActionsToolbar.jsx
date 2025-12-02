@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { X, Folder, Tag, Trash2 } from 'lucide-react';
 
 const BulkActionsToolbar = ({
@@ -9,6 +9,8 @@ const BulkActionsToolbar = ({
     onDelete,
     folders = []
 }) => {
+    const [showFolderDropdown, setShowFolderDropdown] = useState(false);
+
     if (selectedCount === 0) return null;
 
     return (
@@ -26,40 +28,62 @@ const BulkActionsToolbar = ({
                 {/* Actions */}
                 <div className="flex items-center gap-2">
                     {/* Move to Folder */}
-                    <div className="relative group">
-                        <button className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors">
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowFolderDropdown(!showFolderDropdown)}
+                            onMouseEnter={() => setShowFolderDropdown(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+                        >
                             <Folder className="w-4 h-4" />
                             Mover a
                         </button>
 
                         {/* Dropdown */}
-                        <div className="absolute bottom-full left-0 mb-2 hidden group-hover:block">
-                            <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 min-w-[200px] max-h-64 overflow-y-auto">
-                                <button
-                                    onClick={() => onMoveToFolder(null)}
-                                    className="w-full flex items-center gap-2 px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors text-left"
+                        {showFolderDropdown && (
+                            <>
+                                {/* Invisible overlay to close dropdown when clicking outside */}
+                                <div
+                                    className="fixed inset-0 z-10"
+                                    onClick={() => setShowFolderDropdown(false)}
+                                />
+                                <div
+                                    className="absolute bottom-full left-0 mb-2 z-20"
+                                    onMouseLeave={() => setShowFolderDropdown(false)}
                                 >
-                                    <Folder className="w-4 h-4" />
-                                    Todas las sesiones
-                                </button>
-                                {folders.length > 0 && (
-                                    <div className="h-px bg-slate-700 my-1"></div>
-                                )}
-                                {folders.map(folder => (
-                                    <button
-                                        key={folder.id}
-                                        onClick={() => onMoveToFolder(folder.id)}
-                                        className="w-full flex items-center gap-2 px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors text-left"
-                                    >
-                                        <div
-                                            className="w-4 h-4 rounded"
-                                            style={{ backgroundColor: folder.color }}
-                                        />
-                                        {folder.name}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                                    <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 min-w-[200px] max-h-64 overflow-y-auto">
+                                        <button
+                                            onClick={() => {
+                                                onMoveToFolder(null);
+                                                setShowFolderDropdown(false);
+                                            }}
+                                            className="w-full flex items-center gap-2 px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors text-left"
+                                        >
+                                            <Folder className="w-4 h-4" />
+                                            Todas las sesiones
+                                        </button>
+                                        {folders.length > 0 && (
+                                            <div className="h-px bg-slate-700 my-1"></div>
+                                        )}
+                                        {folders.map(folder => (
+                                            <button
+                                                key={folder.id}
+                                                onClick={() => {
+                                                    onMoveToFolder(folder.id);
+                                                    setShowFolderDropdown(false);
+                                                }}
+                                                className="w-full flex items-center gap-2 px-4 py-2 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors text-left"
+                                            >
+                                                <div
+                                                    className="w-4 h-4 rounded"
+                                                    style={{ backgroundColor: folder.color }}
+                                                />
+                                                {folder.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     {/* Add Tags */}
